@@ -4,6 +4,7 @@ import type React from "react"
 import { cn } from "@/lib/utils"
 import type { ModuleType } from "./expense-app"
 import { CONFIG } from "@/lib/constants"
+import { useApp } from "@/contexts/AppContext"
 import {
   LayoutDashboard,
   Upload,
@@ -61,9 +62,18 @@ export function Sidebar({
   onClose,
   variant = "side",
 }: SidebarProps) {
+  const { clearAllData } = useApp()
+
   const handleModuleClick = (id: ModuleType) => {
     setActiveModule(id)
     onClose()
+  }
+
+  const handleClearAllData = () => {
+    if (confirm("¿Estás seguro de que querés borrar TODOS los datos? Esta acción no se puede deshacer.")) {
+      clearAllData()
+      onClose()
+    }
   }
 
   if (variant === "top") {
@@ -142,7 +152,10 @@ export function Sidebar({
                 ))}
               </select>
             </div>
-            <button className="p-2 rounded-xl bg-destructive/10 hover:bg-destructive/15 text-destructive transition-all border border-destructive/20">
+            <button
+              onClick={handleClearAllData}
+              className="p-2 rounded-xl bg-destructive/10 hover:bg-destructive/15 text-destructive transition-all border border-destructive/20"
+            >
               <Trash2 size={16} />
             </button>
           </div>
@@ -243,7 +256,10 @@ export function Sidebar({
           </div>
         </div>
 
-        <button className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-destructive/10 hover:bg-destructive/15 text-destructive text-sm font-medium transition-all duration-200 border border-destructive/20">
+        <button
+          onClick={handleClearAllData}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-destructive/10 hover:bg-destructive/15 text-destructive text-sm font-medium transition-all duration-200 border border-destructive/20"
+        >
           <Trash2 size={16} />
           <span>Borrar Datos</span>
         </button>

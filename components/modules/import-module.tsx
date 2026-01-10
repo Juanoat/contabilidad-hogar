@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useCallback, useMemo } from "react"
-import { Upload, FileSpreadsheet, Check, X, AlertCircle, Trash2, Sparkles, Undo2 } from "lucide-react"
+import { Upload, FileSpreadsheet, Check, X, AlertCircle, Trash2, Sparkles, Undo2, HelpCircle, Copy, CheckCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useApp } from "@/contexts/AppContext"
@@ -29,6 +29,10 @@ export function ImportModule({ appState }: ImportModuleProps) {
   const [previewData, setPreviewData] = useState<ParsedRow[]>([])
   const [duplicates, setDuplicates] = useState<ParsedRow[]>([])
   const [showPreview, setShowPreview] = useState(false)
+
+  // Help modal state
+  const [showHelp, setShowHelp] = useState(false)
+  const [copiedPrompt, setCopiedPrompt] = useState(false)
 
   // Undo state
   const [lastImport, setLastImport] = useState<{
@@ -158,9 +162,20 @@ export function ImportModule({ appState }: ImportModuleProps) {
     <div className="p-4 lg:p-8 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
       <header>
-        <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-2xl lg:text-3xl font-bold text-foreground tracking-tight">Importar Datos</h1>
-          <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground tracking-tight">Importar Datos</h1>
+            <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowHelp(true)}
+            className="gap-2 glass-subtle border-border/50 hover:bg-muted/30"
+          >
+            <HelpCircle size={16} />
+            <span className="hidden sm:inline">Ayuda</span>
+          </Button>
         </div>
         <p className="text-muted-foreground">Cargá archivos Excel con tus gastos. Se validarán automáticamente.</p>
       </header>
@@ -493,6 +508,259 @@ export function ImportModule({ appState }: ImportModuleProps) {
             )}
           </div>
         )}
+      </div>
+
+      {/* Help Modal */}
+      {showHelp && (
+        <HelpModal
+          onClose={() => setShowHelp(false)}
+          copiedPrompt={copiedPrompt}
+          setCopiedPrompt={setCopiedPrompt}
+        />
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELP MODAL COMPONENT
+// ═══════════════════════════════════════════════════════════════
+
+interface HelpModalProps {
+  onClose: () => void
+  copiedPrompt: boolean
+  setCopiedPrompt: (value: boolean) => void
+}
+
+function HelpModal({ onClose, copiedPrompt, setCopiedPrompt }: HelpModalProps) {
+  const promptFull = `Necesito que conviertas los siguientes gastos a formato Excel para mi app de contabilidad del hogar.
+
+ESTRUCTURA REQUERIDA:
+- descripcion (obligatorio): nombre del gasto
+- fecha (obligatorio): formato DD/MM/YYYY
+- monto_ars: monto en pesos (dejar vacío si es en USD)
+- monto_usd: monto en dólares (dejar vacío si es en ARS)
+- medio_pago: Mastercard | Visa | Amex | Efectivo
+- entidad: Galicia Mas | Galicia | Patagonia | Ciudad | Macro | Hipotecario | Amex directa
+- cuotas: número total de cuotas (1 si no es en cuotas)
+- cuota_actual: número de cuota actual (1 si no es en cuotas)
+- responsable: Persona 1 | Persona 2 | Compartido
+
+REGLAS:
+1. Si no especifico moneda, asumir ARS
+2. Si no especifico cuotas, poner 1
+3. Si no especifico responsable, poner "Compartido"
+4. Si no especifico medio de pago, inferir de la entidad o poner "Efectivo"
+5. Generar una tabla en formato CSV o Markdown que pueda copiar a Excel
+
+MIS GASTOS:
+[PEGAR TUS GASTOS AQUÍ]`
+
+  const promptShort = `Convertí estos gastos a tabla Excel con columnas:
+descripcion, fecha (DD/MM/YYYY), monto_ars, monto_usd, medio_pago (Mastercard/Visa/Amex/Efectivo), entidad (Galicia Mas/Galicia/Patagonia/Ciudad/Macro/Hipotecario), cuotas, cuota_actual, responsable (Persona 1/Persona 2/Compartido)
+
+Gastos:
+[TUS GASTOS AQUÍ]`
+
+  const [activePrompt, setActivePrompt] = useState<'full' | 'short'>('full')
+
+  const copyPrompt = async () => {
+    const text = activePrompt === 'full' ? promptFull : promptShort
+    await navigator.clipboard.writeText(text)
+    setCopiedPrompt(true)
+    setTimeout(() => setCopiedPrompt(false), 2000)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="relative glass-strong rounded-3xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+        {/* Header */}
+        <div className="p-6 border-b border-border/30 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+              <HelpCircle className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-foreground">Manual de Carga</h2>
+              <p className="text-sm text-muted-foreground">Formato del archivo Excel</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Estructura del Excel */}
+          <section>
+            <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
+              <FileSpreadsheet size={18} className="text-primary" />
+              Estructura del Excel
+            </h3>
+            <div className="overflow-x-auto rounded-xl border border-border/30">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/30">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-medium text-foreground">Columna</th>
+                    <th className="text-center px-3 py-2 font-medium text-foreground">Req.</th>
+                    <th className="text-left px-3 py-2 font-medium text-foreground">Descripción</th>
+                    <th className="text-left px-3 py-2 font-medium text-foreground">Ejemplo</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/20">
+                  <tr><td className="px-3 py-2 font-mono text-xs">descripcion</td><td className="px-3 py-2 text-center text-chart-2">✓</td><td className="px-3 py-2 text-muted-foreground">Nombre del gasto</td><td className="px-3 py-2 text-muted-foreground">Netflix</td></tr>
+                  <tr><td className="px-3 py-2 font-mono text-xs">fecha</td><td className="px-3 py-2 text-center text-chart-2">✓</td><td className="px-3 py-2 text-muted-foreground">DD/MM/YYYY</td><td className="px-3 py-2 text-muted-foreground">15/01/2025</td></tr>
+                  <tr><td className="px-3 py-2 font-mono text-xs">monto_ars</td><td className="px-3 py-2 text-center text-yellow-500">*</td><td className="px-3 py-2 text-muted-foreground">Monto en pesos</td><td className="px-3 py-2 text-muted-foreground">15000</td></tr>
+                  <tr><td className="px-3 py-2 font-mono text-xs">monto_usd</td><td className="px-3 py-2 text-center text-yellow-500">*</td><td className="px-3 py-2 text-muted-foreground">Monto en dólares</td><td className="px-3 py-2 text-muted-foreground">50.00</td></tr>
+                  <tr><td className="px-3 py-2 font-mono text-xs">medio_pago</td><td className="px-3 py-2 text-center text-muted-foreground">-</td><td className="px-3 py-2 text-muted-foreground">Tarjeta/forma de pago</td><td className="px-3 py-2 text-muted-foreground">Visa</td></tr>
+                  <tr><td className="px-3 py-2 font-mono text-xs">entidad</td><td className="px-3 py-2 text-center text-muted-foreground">-</td><td className="px-3 py-2 text-muted-foreground">Banco emisor</td><td className="px-3 py-2 text-muted-foreground">Galicia</td></tr>
+                  <tr><td className="px-3 py-2 font-mono text-xs">cuotas</td><td className="px-3 py-2 text-center text-muted-foreground">-</td><td className="px-3 py-2 text-muted-foreground">Total de cuotas</td><td className="px-3 py-2 text-muted-foreground">12</td></tr>
+                  <tr><td className="px-3 py-2 font-mono text-xs">cuota_actual</td><td className="px-3 py-2 text-center text-muted-foreground">-</td><td className="px-3 py-2 text-muted-foreground">Cuota actual</td><td className="px-3 py-2 text-muted-foreground">3</td></tr>
+                  <tr><td className="px-3 py-2 font-mono text-xs">responsable</td><td className="px-3 py-2 text-center text-muted-foreground">-</td><td className="px-3 py-2 text-muted-foreground">Quién pagó</td><td className="px-3 py-2 text-muted-foreground">Persona 1</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              <span className="text-chart-2">✓</span> = Obligatorio | <span className="text-yellow-500">*</span> = Al menos uno requerido
+            </p>
+          </section>
+
+          {/* Valores Válidos */}
+          <section>
+            <h3 className="text-lg font-semibold text-foreground mb-3">Valores Válidos</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Medios de Pago */}
+              <div className="glass-subtle rounded-xl p-4">
+                <h4 className="font-medium text-foreground mb-2 text-sm">Medios de Pago</h4>
+                <ul className="space-y-1 text-sm text-muted-foreground">
+                  <li><span className="text-foreground">Mastercard</span> <span className="text-xs">(mc, master)</span></li>
+                  <li><span className="text-foreground">Visa</span></li>
+                  <li><span className="text-foreground">Amex</span> <span className="text-xs">(american express)</span></li>
+                  <li><span className="text-foreground">Efectivo</span> <span className="text-xs">(cash, débito)</span></li>
+                </ul>
+              </div>
+
+              {/* Entidades */}
+              <div className="glass-subtle rounded-xl p-4">
+                <h4 className="font-medium text-foreground mb-2 text-sm">Entidades</h4>
+                <ul className="space-y-1 text-sm text-muted-foreground">
+                  <li><span className="text-foreground">Galicia Mas</span></li>
+                  <li><span className="text-foreground">Galicia</span> <span className="text-xs">(bbva)</span></li>
+                  <li><span className="text-foreground">Patagonia</span></li>
+                  <li><span className="text-foreground">Ciudad</span></li>
+                  <li><span className="text-foreground">Macro</span></li>
+                  <li><span className="text-foreground">Hipotecario</span></li>
+                  <li><span className="text-foreground">Amex directa</span></li>
+                </ul>
+              </div>
+
+              {/* Responsables */}
+              <div className="glass-subtle rounded-xl p-4">
+                <h4 className="font-medium text-foreground mb-2 text-sm">Responsables</h4>
+                <ul className="space-y-1 text-sm text-muted-foreground">
+                  <li><span className="text-foreground">Persona 1</span> <span className="text-xs">(p1, 1)</span></li>
+                  <li><span className="text-foreground">Persona 2</span> <span className="text-xs">(p2, 2)</span></li>
+                  <li><span className="text-foreground">Compartido</span> <span className="text-xs">(ambos)</span></li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          {/* Prompt para IA */}
+          <section>
+            <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
+              <Sparkles size={18} className="text-primary" />
+              Prompt para IA
+            </h3>
+            <p className="text-sm text-muted-foreground mb-3">
+              Copiá este prompt en ChatGPT o Claude junto con tus gastos para generar el Excel automáticamente.
+            </p>
+
+            {/* Prompt Tabs */}
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={() => setActivePrompt('full')}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                  activePrompt === 'full'
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted/30 text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Completo
+              </button>
+              <button
+                onClick={() => setActivePrompt('short')}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                  activePrompt === 'short'
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted/30 text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Rápido
+              </button>
+            </div>
+
+            {/* Prompt Box */}
+            <div className="relative">
+              <pre className="glass-subtle rounded-xl p-4 text-xs text-muted-foreground whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">
+                {activePrompt === 'full' ? promptFull : promptShort}
+              </pre>
+              <button
+                onClick={copyPrompt}
+                className={cn(
+                  "absolute top-2 right-2 p-2 rounded-lg transition-all",
+                  copiedPrompt
+                    ? "bg-chart-2/20 text-chart-2"
+                    : "bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+              >
+                {copiedPrompt ? <CheckCheck size={16} /> : <Copy size={16} />}
+              </button>
+            </div>
+          </section>
+
+          {/* Tips */}
+          <section>
+            <h3 className="text-lg font-semibold text-foreground mb-3">Tips</h3>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li className="flex gap-2">
+                <span className="text-primary">•</span>
+                <span><strong className="text-foreground">Cuotas:</strong> Para compras en cuotas, importá cada mes actualizando cuota_actual.</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-primary">•</span>
+                <span><strong className="text-foreground">Montos:</strong> Solo números, sin símbolos ($, US$).</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-primary">•</span>
+                <span><strong className="text-foreground">Duplicados:</strong> El sistema detecta automáticamente gastos ya importados.</span>
+              </li>
+            </ul>
+          </section>
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-border/30 shrink-0">
+          <Button
+            onClick={onClose}
+            className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            Entendido
+          </Button>
+        </div>
       </div>
     </div>
   )
