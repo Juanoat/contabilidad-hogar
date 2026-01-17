@@ -1,33 +1,71 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════
-// APP CONTEXT - Estado Global de la Aplicación
+// APP CONTEXT - Estado Global con Base de Datos
 // ═══════════════════════════════════════════════════════════════
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { AppState, AppContextType, Expense, Income } from '@/lib/types';
-import {
-  loadFullState,
-  saveExpensesToStorage,
-  saveIncomeToStorage,
-  saveExchangeRate,
-  clearAllStorage,
-  getInitialState,
-} from '@/lib/storage';
 import { getMonthKey, generateId } from '@/lib/parsers';
 
 const AppContext = createContext<AppContextType | null>(null);
 
+function getInitialState(): AppState {
+  const now = new Date();
+  return {
+    currentMonth: now.getMonth() + 1,
+    currentYear: now.getFullYear(),
+    data: {},
+    income: { base: [], overrides: {} },
+    exchangeRate: 1200,
+  };
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(getInitialState);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
 
-  // Cargar datos de localStorage al montar
+  // Cargar datos de la base de datos al montar
   useEffect(() => {
-    const loadedState = loadFullState();
-    setState(loadedState);
-    setIsLoaded(true);
-    console.log('✓ Estado cargado de localStorage');
+    async function loadFromDatabase() {
+      try {
+        // Inicializar DB (crea tablas si no existen)
+        await fetch('/api/db/init');
+
+        // Cargar gastos
+        const expensesRes = await fetch('/api/expenses');
+        const expensesData = await expensesRes.json();
+
+        // Cargar ingresos
+        const incomesRes = await fetch('/api/incomes');
+        const incomesData = await incomesRes.json();
+
+        // Cargar configuración
+        const settingsRes = await fetch('/api/settings');
+        const settingsData = await settingsRes.json();
+
+        if (expensesData.success && incomesData.success && settingsData.success) {
+          setState(prev => ({
+            ...prev,
+            data: expensesData.data || {},
+            income: {
+              base: incomesData.data || [],
+              overrides: {},
+            },
+            exchangeRate: settingsData.data?.exchangeRate || 1200,
+          }));
+          console.log('✓ Datos cargados de la base de datos');
+        }
+      } catch (error) {
+        console.error('Error cargando datos:', error);
+        setDbError('Error conectando a la base de datos');
+      } finally {
+        setIsLoaded(true);
+      }
+    }
+
+    loadFromDatabase();
   }, []);
 
   // === Setters básicos ===
@@ -40,26 +78,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => ({ ...prev, currentYear: year }));
   }, []);
 
-  const setExchangeRate = useCallback((rate: number) => {
+  const setExchangeRate = useCallback(async (rate: number) => {
     setState((prev) => ({ ...prev, exchangeRate: rate }));
-    saveExchangeRate(rate);
+    try {
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exchangeRate: rate }),
+      });
+    } catch (error) {
+      console.error('Error guardando exchange rate:', error);
+    }
   }, []);
 
   // === Manejo de Gastos ===
 
-  const addExpenses = useCallback((expenses: Expense[], monthKey: string) => {
+  const addExpenses = useCallback(async (expenses: Expense[], monthKey: string) => {
+    // Actualizar estado local inmediatamente
     setState((prev) => {
       const newData = { ...prev.data };
       if (!newData[monthKey]) {
         newData[monthKey] = [];
       }
       newData[monthKey] = [...newData[monthKey], ...expenses];
-      saveExpensesToStorage(newData);
       return { ...prev, data: newData };
     });
+
+    // Guardar en base de datos
+    try {
+      await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expenses, monthKey }),
+      });
+    } catch (error) {
+      console.error('Error guardando gastos:', error);
+    }
   }, []);
 
-  const deleteExpense = useCallback((monthKey: string, index: number) => {
+  const deleteExpense = useCallback(async (monthKey: string, index: number) => {
+    // Actualizar estado local
     setState((prev) => {
       const newData = { ...prev.data };
       if (newData[monthKey]) {
@@ -67,71 +125,116 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (newData[monthKey].length === 0) {
           delete newData[monthKey];
         }
-        saveExpensesToStorage(newData);
       }
       return { ...prev, data: newData };
     });
+
+    // Borrar de base de datos
+    try {
+      await fetch(`/api/expenses?monthKey=${monthKey}&index=${index}`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      console.error('Error borrando gasto:', error);
+    }
   }, []);
 
-  const clearMonthData = useCallback((monthKey: string) => {
+  const clearMonthData = useCallback(async (monthKey: string) => {
     setState((prev) => {
       const newData = { ...prev.data };
       delete newData[monthKey];
-      saveExpensesToStorage(newData);
       return { ...prev, data: newData };
     });
+
+    try {
+      await fetch(`/api/expenses?monthKey=${monthKey}`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      console.error('Error borrando mes:', error);
+    }
   }, []);
 
-  const clearAllData = useCallback(() => {
-    clearAllStorage();
+  const clearAllData = useCallback(async () => {
     setState(getInitialState());
+
+    try {
+      await Promise.all([
+        fetch('/api/expenses?all=true', { method: 'DELETE' }),
+        fetch('/api/incomes?all=true', { method: 'DELETE' }),
+      ]);
+    } catch (error) {
+      console.error('Error borrando datos:', error);
+    }
   }, []);
 
   // === Manejo de Ingresos ===
 
-  const addIncome = useCallback((income: Omit<Income, 'id'>) => {
+  const addIncome = useCallback(async (income: Omit<Income, 'id'>) => {
     const newIncome: Income = { ...income, id: generateId() };
-    setState((prev) => {
-      const newIncomeState = {
+
+    setState((prev) => ({
+      ...prev,
+      income: {
         ...prev.income,
         base: [...prev.income.base, newIncome],
-      };
-      saveIncomeToStorage(newIncomeState);
-      return { ...prev, income: newIncomeState };
-    });
+      },
+    }));
+
+    try {
+      await fetch('/api/incomes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newIncome),
+      });
+    } catch (error) {
+      console.error('Error guardando ingreso:', error);
+    }
   }, []);
 
-  const updateIncome = useCallback((id: string, updates: Partial<Income>) => {
-    setState((prev) => {
-      const newIncomeState = {
+  const updateIncome = useCallback(async (id: string, updates: Partial<Income>) => {
+    setState((prev) => ({
+      ...prev,
+      income: {
         ...prev.income,
         base: prev.income.base.map((item) =>
           item.id === id ? { ...item, ...updates } : item
         ),
-      };
-      saveIncomeToStorage(newIncomeState);
-      return { ...prev, income: newIncomeState };
-    });
+      },
+    }));
+
+    try {
+      await fetch('/api/incomes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, updates }),
+      });
+    } catch (error) {
+      console.error('Error actualizando ingreso:', error);
+    }
   }, []);
 
-  const deleteIncome = useCallback((id: string) => {
-    setState((prev) => {
-      const newIncomeState = {
+  const deleteIncome = useCallback(async (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      income: {
         ...prev.income,
         base: prev.income.base.filter((item) => item.id !== id),
-      };
-      saveIncomeToStorage(newIncomeState);
-      return { ...prev, income: newIncomeState };
-    });
+      },
+    }));
+
+    try {
+      await fetch(`/api/incomes?id=${id}`, { method: 'DELETE' });
+    } catch (error) {
+      console.error('Error borrando ingreso:', error);
+    }
   }, []);
 
   const getIncomeForMonth = useCallback(
     (monthKey: string): Income[] => {
-      // Si hay override para este mes, usarlo
       if (state.income.overrides[monthKey]) {
         return state.income.overrides[monthKey];
       }
-      // Sino, devolver copia de los ingresos base
       return state.income.base.map((item) => ({ ...item }));
     },
     [state.income]
@@ -169,11 +272,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     getMonthExpenses,
   };
 
-  // No renderizar hasta que se carguen los datos
+  // Loading state
   if (!isLoaded) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="text-center space-y-4">
+          <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full mx-auto" />
+          <p className="text-muted-foreground">Conectando a la base de datos...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (dbError) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="text-center space-y-4 p-8 max-w-md">
+          <div className="w-16 h-16 rounded-full bg-destructive/20 flex items-center justify-center mx-auto">
+            <span className="text-2xl">⚠️</span>
+          </div>
+          <h2 className="text-xl font-bold text-foreground">Error de Conexión</h2>
+          <p className="text-muted-foreground">{dbError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+          >
+            Reintentar
+          </button>
+        </div>
       </div>
     );
   }
