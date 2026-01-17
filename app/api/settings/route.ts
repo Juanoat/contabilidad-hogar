@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/lib/auth';
 import { getExchangeRate, setExchangeRate } from '@/lib/db';
 
-// GET - Obtener configuración
+// GET - Obtener configuración del usuario
 export async function GET() {
   try {
-    const exchangeRate = await getExchangeRate();
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: 'No autenticado' },
+        { status: 401 }
+      );
+    }
+
+    const exchangeRate = await getExchangeRate(session.user.id);
     return NextResponse.json({
       success: true,
       data: { exchangeRate }
@@ -21,10 +30,18 @@ export async function GET() {
 // PUT - Actualizar configuración
 export async function PUT(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: 'No autenticado' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
 
     if (body.exchangeRate !== undefined) {
-      await setExchangeRate(body.exchangeRate);
+      await setExchangeRate(session.user.id, body.exchangeRate);
     }
 
     return NextResponse.json({ success: true });

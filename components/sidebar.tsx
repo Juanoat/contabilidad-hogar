@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import type { ModuleType } from "./expense-app"
 import { CONFIG } from "@/lib/constants"
 import { useApp } from "@/contexts/AppContext"
+import { signOut, useSession } from "next-auth/react"
 import {
   LayoutDashboard,
   Upload,
@@ -17,6 +18,8 @@ import {
   Trash2,
   X,
   ChevronDown,
+  LogOut,
+  User,
 } from "lucide-react"
 
 interface AppStateCompat {
@@ -63,6 +66,7 @@ export function Sidebar({
   variant = "side",
 }: SidebarProps) {
   const { clearAllData } = useApp()
+  const { data: session } = useSession()
 
   const handleModuleClick = (id: ModuleType) => {
     setActiveModule(id)
@@ -74,6 +78,10 @@ export function Sidebar({
       clearAllData()
       onClose()
     }
+  }
+
+  const handleLogout = () => {
+    signOut({ callbackUrl: '/login' })
   }
 
   if (variant === "top") {
@@ -157,6 +165,12 @@ export function Sidebar({
               className="p-2 rounded-xl bg-destructive/10 hover:bg-destructive/15 text-destructive transition-all border border-destructive/20"
             >
               <Trash2 size={16} />
+            </button>
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-xl bg-muted/30 hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-all"
+            >
+              <LogOut size={16} />
             </button>
           </div>
         </div>
@@ -263,6 +277,32 @@ export function Sidebar({
           <Trash2 size={16} />
           <span>Borrar Datos</span>
         </button>
+
+        {/* User info and logout */}
+        <div className="mt-4 pt-4 border-t border-border/30 space-y-3">
+          {session?.user && (
+            <div className="flex items-center gap-3 px-2">
+              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                <User size={14} className="text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">
+                  {session.user.name || session.user.email}
+                </p>
+                {session.user.name && (
+                  <p className="text-xs text-muted-foreground truncate">{session.user.email}</p>
+                )}
+              </div>
+            </div>
+          )}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-muted/30 hover:bg-muted/50 text-muted-foreground hover:text-foreground text-sm font-medium transition-all duration-200"
+          >
+            <LogOut size={16} />
+            <span>Cerrar Sesión</span>
+          </button>
+        </div>
       </div>
     </aside>
   )

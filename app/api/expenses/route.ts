@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/lib/auth';
 import {
   getAllExpenses,
   addExpenses,
@@ -7,10 +8,18 @@ import {
   clearAllExpenses,
 } from '@/lib/db';
 
-// GET - Obtener todos los gastos
+// GET - Obtener todos los gastos del usuario
 export async function GET() {
   try {
-    const data = await getAllExpenses();
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: 'No autenticado' },
+        { status: 401 }
+      );
+    }
+
+    const data = await getAllExpenses(session.user.id);
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error('Error fetching expenses:', error);
@@ -24,6 +33,14 @@ export async function GET() {
 // POST - Agregar gastos
 export async function POST(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: 'No autenticado' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { expenses, monthKey } = body;
 
@@ -34,7 +51,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await addExpenses(expenses, monthKey);
+    await addExpenses(session.user.id, expenses, monthKey);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error adding expenses:', error);
@@ -48,13 +65,21 @@ export async function POST(request: NextRequest) {
 // DELETE - Borrar gastos
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: 'No autenticado' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const monthKey = searchParams.get('monthKey');
     const index = searchParams.get('index');
     const all = searchParams.get('all');
 
     if (all === 'true') {
-      await clearAllExpenses();
+      await clearAllExpenses(session.user.id);
       return NextResponse.json({ success: true, message: 'All expenses deleted' });
     }
 
@@ -66,9 +91,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (index !== null) {
-      await deleteExpense(monthKey, parseInt(index));
+      await deleteExpense(session.user.id, monthKey, parseInt(index));
     } else {
-      await clearMonthExpenses(monthKey);
+      await clearMonthExpenses(session.user.id, monthKey);
     }
 
     return NextResponse.json({ success: true });

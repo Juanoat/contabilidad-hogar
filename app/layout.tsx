@@ -1,7 +1,7 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { DM_Sans, JetBrains_Mono } from "next/font/google"
-import { AppProvider } from "@/contexts/AppContext"
+import { Providers } from "@/components/providers"
 import "./globals.css"
 
 const dmSans = DM_Sans({
@@ -69,9 +69,9 @@ export default function RootLayout({
       <body
         className={`${dmSans.className} ${jetbrainsMono.variable} font-sans antialiased warm-gradient min-h-screen`}
       >
-        <AppProvider>
+        <Providers>
           {children}
-        </AppProvider>
+        </Providers>
       </body>
     </html>
   )
